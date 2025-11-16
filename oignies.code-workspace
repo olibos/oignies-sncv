@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "path": "web"
+    },
+    {
+      "path": "firmware"
+    },
+    {
+      "name": ".github",
+      "path": ".github"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.pio": true
+    }
+  }
+}

@@ -1,0 +1,44 @@
+name: Build and Deploy Website
+
+on:
+  push:
+    branches:
+      - main   # change if your default branch is different
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # 2️⃣ Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # 3️⃣ Install dependencies with Yarn
+      - name: Install dependencies
+        run: yarn install
+        working-directory: ./web
+
+      # 4️⃣ Build the Svelte project
+      - name: Build
+        run: yarn build
+        working-directory: ./web
+
+      # 5️⃣ Deploy to GitHub Pages
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./web/dist
+
+      - name: Publish to GitHub Pages
+        uses: actions/deploy-pages@v4
