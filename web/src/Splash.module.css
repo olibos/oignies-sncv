@@ -161,9 +161,10 @@
   }
 
   .footer {
-    margin-top: 3rem;
     opacity: 0.7;
     font-size: 0.875rem;
+    position: absolute;
+    inset: auto 0 1rem;
   }
 
   .bluetooth-icon-animated {
