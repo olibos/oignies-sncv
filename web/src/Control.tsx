@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Sun, Moon, Sunrise, Lightbulb, Wind, AlertCircle, Monitor } from 'lucide-react';
 import './Control.css'
+import { useModuleCommunication } from './contexts/ModuleCommunication';
 
 const labels = { day: 'jour', night: 'nuit', sunrise: 'aube', sunset: 'crépuscule' };
 type LabelKeys = keyof typeof labels;
-type LightMode = keyof typeof labels | 'auto' | 'manual';
 type Theme = 'light' | 'dark' | 'auto';
 export default function Control() {
   const [theme, setTheme] = useState<Theme>('auto');
-  const [lightMode, setLightMode] = useState<LightMode>('auto');
   const [timeOfDay, setTimeOfDay] = useState<LabelKeys>('day');
-  const [manualColor, setManualColor] = useState('#FFD700');
   const [brightness, setBrightness] = useState(80);
   const [wcDoorOpen, setWcDoorOpen] = useState(false);
   const [trainSpeed, setTrainSpeed] = useState(0);
   const [forwardDirection, setForwardDirection] = useState(true);
   const [_autoTime, setAutoTime] = useState(0);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
-
+  const { setLightMode, setLightColor, trainState: { lightMode, lightColor } } = useModuleCommunication();
+  
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const controller = new AbortController();
@@ -48,7 +47,7 @@ export default function Control() {
   }, [lightMode]);
 
   const getLightColor = () => {
-    if (lightMode === 'manual') return manualColor;
+    if (lightMode === 'manual') return lightColor;
     
     const colors = {
       day: '#FFE87C',
@@ -218,8 +217,8 @@ export default function Control() {
                 <label className="label">Couleur</label>
                 <input
                   type="color"
-                  value={manualColor}
-                  onChange={(e) => setManualColor(e.target.value)}
+                  value={lightColor}
+                  onChange={(e) => setLightColor(e.target.value)}
                   className="input-color"
                 />
               </div>

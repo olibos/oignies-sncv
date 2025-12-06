@@ -7,7 +7,7 @@
 
 // UUIDs pour BLE - Personnalisés pour éviter conflits
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CONTROL_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define TRAIN_CONTROL_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define STATUS_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 #define STATUS_LED_PIN 2
 
@@ -37,7 +37,8 @@ enum AnimationMode
     MODE_DAY,
     MODE_NIGHT,
     MODE_TRANSITION,
-    MODE_PAUSED
+    MODE_PAUSED,
+    MODE_MANUAL
 };
 
 AnimationMode currentMode = MODE_AUTO;
@@ -56,6 +57,7 @@ struct Star
 
 #define NUM_STARS 25
 Star stars[NUM_STARS];
+CRGB manualColor;
 
 unsigned long cycleStart = 0;
 unsigned long lastStatusUpdate = 0;
@@ -171,7 +173,7 @@ void setupBLE()
 
     // Caractéristique de contrôle (WRITE)
     pControlCharacteristic = pService->createCharacteristic(
-        CONTROL_CHAR_UUID,
+        TRAIN_CONTROL_CHARACTERISTIC_UUID,
         BLECharacteristic::PROPERTY_WRITE);
     pControlCharacteristic->setCallbacks(new ControlCallbacks());
 
@@ -238,71 +240,60 @@ void loop()
 void processCommand(String command)
 {
     // Parser JSON avec ArduinoJson v7
-    if (command.startsWith("{"))
+    if (!command.startsWith("{"))
+        return;
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, command);
+
+    if (error)
     {
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, command);
+        Serial.print("Erreur parsing JSON: ");
+        Serial.println(error.c_str());
+        return;
+    }
 
-        if (error)
-        {
-            Serial.print("Erreur parsing JSON: ");
-            Serial.println(error.c_str());
-            return;
-        }
+    const char *cmd = doc["cmd"];
 
-        const char *cmd = doc["cmd"];
+    if (cmd == nullptr)
+    {
+        Serial.println("Commande manquante");
+        return;
+    }
 
-        if (cmd == nullptr)
-        {
-            Serial.println("Commande manquante");
-            return;
-        }
+    String cmdStr = String(cmd);
+    cmdStr.toUpperCase();
 
-        String cmdStr = String(cmd);
-        cmdStr.toUpperCase();
-
-        if (cmdStr == "MODE")
-        {
-            const char *value = doc["value"];
-            if (value)
-                setMode(String(value));
-        }
-        else if (cmdStr == "BRIGHTNESS")
-        {
-            int value = doc["value"];
-            setBrightness(value);
-        }
-        else if (cmdStr == "SPEED")
-        {
-            int value = doc["value"];
-            setSpeed(value);
-        }
-        else if (cmdStr == "STATUS")
-        {
-            sendStatusUpdate();
-        }
-        else if (cmdStr == "LED")
-        {
-            bool value = doc["value"];
-            digitalWrite(STATUS_LED_PIN, value ? HIGH : LOW);
+    if (cmdStr == "MODE")
+    {
+        JsonVariant value = doc["value"];
+        if (value.is<JsonObject>()) {
+            JsonObject obj = value.as<JsonObject>();
+            manualColor = CRGB(obj["r"] | 0, obj["g"] | 0, obj["b"] | 0);
+            setMode("manual");
+            Serial.print("Color: ");
+            Serial.printf("r=%d, g=%d, b=%d\n", manualColor.r, manualColor.g, manualColor.b);
+        } else if (value.is<const char*>()) {
+            setMode(String(value.as<const char*>()));
         }
     }
-    else
+    else if (cmdStr == "BRIGHTNESS")
     {
-        // Format texte simple
-        command.toUpperCase();
-        if (command == "AUTO")
-            setMode("auto");
-        else if (command == "DAY")
-            setMode("day");
-        else if (command == "NIGHT")
-            setMode("night");
-        else if (command == "PAUSE")
-            setMode("pause");
-        else if (command == "STOP")
-            setMode("stop");
-        else if (command == "STATUS")
-            sendStatusUpdate();
+        int value = doc["value"];
+        setBrightness(value);
+    }
+    else if (cmdStr == "SPEED")
+    {
+        int value = doc["value"];
+        setSpeed(value);
+    }
+    else if (cmdStr == "STATUS")
+    {
+        sendStatusUpdate();
+    }
+    else if (cmdStr == "LED")
+    {
+        bool value = doc["value"];
+        digitalWrite(STATUS_LED_PIN, value ? HIGH : LOW);
     }
 }
 
@@ -334,6 +325,12 @@ void setMode(String mode)
         currentMode = MODE_DAY;
         animationEnabled = true;
         Serial.println("Mode JOUR");
+    }
+    else if (mode == "manual")
+    {
+        currentMode = MODE_MANUAL;
+        animationEnabled = true;
+        Serial.println("Mode MANUEL");
     }
     else if (mode == "night")
     {
@@ -472,6 +469,10 @@ void updateAnimation()
 
     case MODE_PAUSED:
         break;
+
+    case MODE_MANUAL:
+        fill_solid(leds, NUM_LEDS, manualColor);
+        break;
     }
 }
 
@@ -519,7 +520,7 @@ void transitionToNight(float progress)
 void transitionToDay(float progress)
 {
     CRGB nightColor = CRGB(0, 0, 30);
-    CRGB sunriseColor = CRGB(255, 150, 80);  // Orange/rose lever de soleil
+    CRGB sunriseColor = CRGB(255, 150, 80); // Orange/rose lever de soleil
     CRGB dayColor = CRGB(135, 206, 250);
 
     CRGB currentColor;
@@ -542,7 +543,7 @@ void transitionToDay(float progress)
     // Disparition progressive des étoiles dans la première moitié
     if (progress < 0.5)
     {
-        float starProgress = 1.0 - (progress * 2);  // Fade out
+        float starProgress = 1.0 - (progress * 2); // Fade out
         for (int i = 0; i < NUM_STARS; i++)
         {
             uint8_t starBrightness = stars[i].brightness * starProgress;

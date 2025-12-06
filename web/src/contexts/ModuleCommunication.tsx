@@ -29,9 +29,7 @@ interface ModuleCommunicationContextType {
 // Bluetooth Service UUIDs (customize these for your train module)
 const TRAIN_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const TRAIN_CONTROL_CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-const LIGHTING_CHARACTERISTIC_UUID = '12345678-1234-5678-1234-56789abcdef2';// TODO
-const DOOR_CHARACTERISTIC_UUID = '12345678-1234-5678-1234-56789abcdef3'; // TODO
-type Characteristics = typeof TRAIN_CONTROL_CHARACTERISTIC_UUID | typeof LIGHTING_CHARACTERISTIC_UUID | typeof DOOR_CHARACTERISTIC_UUID;
+type Command = {cmd: 'wc'|'mode'|'brightness'|'speed'|'train-speed'|'direction'|'status'|'led', value?: unknown};
 
 // Create context
 const ModuleCommunicationContext = createContext<ModuleCommunicationContextType | undefined>(undefined);
@@ -107,15 +105,12 @@ export const ModuleCommunicationProvider = ({ children }: PropsWithChildren) => 
   }, [device]);
 
   // Helper function to write data to characteristic
-  const writeCharacteristic = useCallback(async (
-    characteristicUUID: Characteristics,
-    data: unknown
-  ): Promise<void> => {
+  const writeCharacteristic = useCallback(async (data: Command): Promise<void> => {
     if (!server || !isConnected) throw new Error('Non connecté au train');
 
     try {
       const service = await server.getPrimaryService(TRAIN_SERVICE_UUID);
-      const characteristic = await service.getCharacteristic(characteristicUUID);
+      const characteristic = await service.getCharacteristic(TRAIN_CONTROL_CHARACTERISTIC_UUID);
       const buffer = new TextEncoder().encode(JSON.stringify(data));
       await characteristic.writeValue(buffer);
     } catch (err) {
@@ -126,19 +121,22 @@ export const ModuleCommunicationProvider = ({ children }: PropsWithChildren) => 
 
   // Set train speed
   const setTrainSpeed = useCallback(async (speed: number) => {
-    await writeCharacteristic(TRAIN_CONTROL_CHARACTERISTIC_UUID, {speed});
+    await writeCharacteristic({cmd:'train-speed', value: speed});
     setTrainState(prev => ({ ...prev, speed }));
   }, [writeCharacteristic]);
 
   // Set train direction
   const setTrainDirection = useCallback(async (forward: boolean) => {
-    await writeCharacteristic(TRAIN_CONTROL_CHARACTERISTIC_UUID, {forward});
+    await writeCharacteristic({cmd:'direction', value: forward});
     setTrainState(prev => ({ ...prev, forward }));
   }, [writeCharacteristic]);
 
   // Set light mode
   const setLightMode = useCallback(async (mode: TrainState['lightMode']) => {
-    await writeCharacteristic(LIGHTING_CHARACTERISTIC_UUID, {mode});
+    const r = Number.parseInt(trainState.lightColor.slice(1, 3), 16);
+    const g = Number.parseInt(trainState.lightColor.slice(3, 5), 16);
+    const b = Number.parseInt(trainState.lightColor.slice(5, 7), 16);
+    await writeCharacteristic({cmd:'mode', value: mode !== 'manual' ? mode : {r,g,b}});
     setTrainState(prev => ({ ...prev, lightMode: mode }));
   }, [writeCharacteristic]);
 
@@ -149,20 +147,20 @@ export const ModuleCommunicationProvider = ({ children }: PropsWithChildren) => 
     const g = Number.parseInt(color.slice(3, 5), 16);
     const b = Number.parseInt(color.slice(5, 7), 16);
     
-    await writeCharacteristic(LIGHTING_CHARACTERISTIC_UUID, {color:{r,g,b}});
+    await writeCharacteristic({cmd:"mode", value:{r,g,b}});
     setTrainState(prev => ({ ...prev, lightColor: color }));
   }, [writeCharacteristic]);
 
   // Set light brightness
   const setLightBrightness = useCallback(async (brightness: number) => {
-    await writeCharacteristic(LIGHTING_CHARACTERISTIC_UUID, {brightness});
+    await writeCharacteristic({cmd:"brightness", value: brightness});
     setTrainState(prev => ({ ...prev, brightness }));
   }, [writeCharacteristic]);
 
   // Toggle WC door
   const toggleWCDoor = useCallback(async () => {
     const newState = !trainState.wcDoorOpen;
-    await writeCharacteristic(DOOR_CHARACTERISTIC_UUID, {open: newState});
+    await writeCharacteristic({cmd:'wc', value: newState});
     setTrainState(prev => ({ ...prev, wcDoorOpen: newState }));
   }, [writeCharacteristic, trainState.wcDoorOpen]);
 
