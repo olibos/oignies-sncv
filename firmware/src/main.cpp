@@ -10,7 +10,6 @@
 #define CONTROL_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define STATUS_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 #define STATUS_LED_PIN 2
-#define FASTLED
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pControlCharacteristic = NULL;
@@ -72,6 +71,7 @@ String getStatusJSON();
 void updateAnimation();
 void displayDay();
 void transitionToNight(float progress);
+void transitionToDay(float progress);
 void displayStarryNight(unsigned long currentTime);
 void shootingStar();
 
@@ -82,12 +82,14 @@ class ServerCallbacks : public BLEServerCallbacks
     void onConnect(BLEServer *pServer)
     {
         deviceConnected = true;
+        digitalWrite(STATUS_LED_PIN, HIGH); // LED ON quand connecté
         Serial.println("Client BLE connecté");
     }
 
     void onDisconnect(BLEServer *pServer)
     {
         deviceConnected = false;
+        digitalWrite(STATUS_LED_PIN, LOW); // LED OFF quand déconnecté
         Serial.println("Client BLE déconnecté");
     }
 };
@@ -117,22 +119,23 @@ void setup()
 
     Serial.println("\n=== Démarrage Module LED ESP32 ===");
 
+    // Initialisation de la LED de statut
     pinMode(STATUS_LED_PIN, OUTPUT);
-// Initialisation FastLED
-#ifdef FASTLED
+    digitalWrite(STATUS_LED_PIN, LOW);
+
+    // Initialisation FastLED
     FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
     FastLED.setBrightness(BRIGHTNESS);
     FastLED.clear();
     FastLED.show();
-#endif
 
     // Initialisation des étoiles
     randomSeed(analogRead(0));
     for (int i = 0; i < NUM_STARS; i++)
     {
         stars[i].pos = random(NUM_LEDS);
-        stars[i].brightness = random(50, 255);
-        stars[i].twinkleSpeed = random(30, 150);
+        stars[i].brightness = random(120, 200);  // Plage plus étroite et plus douce
+        stars[i].twinkleSpeed = random(50, 200); // Vitesse de scintillement plus lente
         stars[i].lastUpdate = millis();
     }
 
@@ -142,7 +145,7 @@ void setup()
     setupBLE();
 
     Serial.println("Système prêt !");
-    Serial.println("Connectez-vous via BLE: ESP32_LED_Module");
+    Serial.println("Connectez-vous via BLE");
 }
 
 void setupBLE()
@@ -191,6 +194,8 @@ void setupBLE()
     BLEDevice::startAdvertising();
 
     Serial.println("BLE démarré - En attente de connexion...");
+    Serial.print("Nom BLE: ");
+    Serial.println(deviceName);
 }
 
 // ===== LOOP PRINCIPAL =====
@@ -224,9 +229,7 @@ void loop()
         updateAnimation();
     }
 
-#ifdef FASTLED
     FastLED.show();
-#endif
     delay(20);
 }
 
@@ -234,7 +237,7 @@ void loop()
 
 void processCommand(String command)
 {
-    // Parser JSON avec ArduinoJson
+    // Parser JSON avec ArduinoJson v7
     if (command.startsWith("{"))
     {
         JsonDocument doc;
@@ -347,10 +350,8 @@ void setMode(String mode)
     else if (mode == "stop")
     {
         animationEnabled = false;
-#ifdef FASTLED
         FastLED.clear();
         FastLED.show();
-#endif
         Serial.println("Mode STOP");
     }
 }
@@ -358,9 +359,7 @@ void setMode(String mode)
 void setBrightness(int value)
 {
     value = constrain(value, 0, 255);
-#ifdef FASTLED
     FastLED.setBrightness(value);
-#endif
     Serial.println("Luminosité: " + String(value));
 }
 
@@ -400,11 +399,7 @@ String getStatusJSON()
     // Remplir le document JSON
     doc["mode"] = modeStr;
     doc["enabled"] = animationEnabled;
-#ifdef FASTLED
     doc["brightness"] = FastLED.getBrightness();
-#else
-    doc["brightness"] = "TBD";
-#endif
     doc["progress"] = round(progress * 10) / 10.0; // 1 décimale
     doc["speed"] = (BASE_CYCLE_DURATION * 100) / cycleDuration;
     doc["stars"] = NUM_STARS;
@@ -436,18 +431,33 @@ void updateAnimation()
 
         float progress = (float)elapsed / cycleDuration;
 
-        if (progress < 0.33)
+        // Cycle complet : Jour → Coucher → Nuit → Lever → Jour
+        if (progress < 0.25)
         {
+            // Phase 1 : JOUR (0-25%)
             displayDay();
         }
-        else if (progress < 0.66)
+        else if (progress < 0.375)
         {
-            float transitionProgress = (progress - 0.33) / 0.33;
-            transitionToNight(transitionProgress);
+            // Phase 2 : COUCHER DE SOLEIL (25-37.5%)
+            float sunsetProgress = (progress - 0.25) / 0.125;
+            transitionToNight(sunsetProgress);
+        }
+        else if (progress < 0.625)
+        {
+            // Phase 3 : NUIT ÉTOILÉE (37.5-62.5%)
+            displayStarryNight(currentTime);
+        }
+        else if (progress < 0.75)
+        {
+            // Phase 4 : LEVER DE SOLEIL (62.5-75%)
+            float sunriseProgress = (progress - 0.625) / 0.125;
+            transitionToDay(sunriseProgress);
         }
         else
         {
-            displayStarryNight(currentTime);
+            // Phase 5 : JOUR (75-100%)
+            displayDay();
         }
         break;
     }
@@ -481,26 +491,64 @@ void transitionToNight(float progress)
 
     if (progress < 0.5)
     {
+        // Jour → Orange crépusculaire
         float subProgress = progress * 2;
         currentColor = blend(dayColor, sunsetColor, subProgress * 255);
     }
     else
     {
+        // Orange crépusculaire → Nuit
         float subProgress = (progress - 0.5) * 2;
         currentColor = blend(sunsetColor, nightColor, subProgress * 255);
     }
 
     fill_solid(leds, NUM_LEDS, currentColor);
 
-    // if (progress > 0.5)
-    // {
-    //     float starProgress = (progress - 0.5) * 2;
-    //     for (int i = 0; i < NUM_STARS; i++)
-    //     {
-    //         uint8_t starBrightness = stars[i].brightness * starProgress;
-    //         leds[stars[i].pos] = CRGB(starBrightness * 0.9, starBrightness * 0.9, starBrightness);
-    //     }
-    // }
+    // Apparition progressive des étoiles dans la deuxième moitié
+    if (progress > 0.5)
+    {
+        float starProgress = (progress - 0.5) * 2;
+        for (int i = 0; i < NUM_STARS; i++)
+        {
+            uint8_t starBrightness = stars[i].brightness * starProgress;
+            leds[stars[i].pos] = CRGB(starBrightness * 0.9, starBrightness * 0.9, starBrightness);
+        }
+    }
+}
+
+void transitionToDay(float progress)
+{
+    CRGB nightColor = CRGB(0, 0, 30);
+    CRGB sunriseColor = CRGB(255, 150, 80);  // Orange/rose lever de soleil
+    CRGB dayColor = CRGB(135, 206, 250);
+
+    CRGB currentColor;
+
+    if (progress < 0.5)
+    {
+        // Nuit → Orange lever de soleil
+        float subProgress = progress * 2;
+        currentColor = blend(nightColor, sunriseColor, subProgress * 255);
+    }
+    else
+    {
+        // Orange lever de soleil → Jour
+        float subProgress = (progress - 0.5) * 2;
+        currentColor = blend(sunriseColor, dayColor, subProgress * 255);
+    }
+
+    fill_solid(leds, NUM_LEDS, currentColor);
+
+    // Disparition progressive des étoiles dans la première moitié
+    if (progress < 0.5)
+    {
+        float starProgress = 1.0 - (progress * 2);  // Fade out
+        for (int i = 0; i < NUM_STARS; i++)
+        {
+            uint8_t starBrightness = stars[i].brightness * starProgress;
+            leds[stars[i].pos] = CRGB(starBrightness * 0.9, starBrightness * 0.9, starBrightness);
+        }
+    }
 }
 
 void displayStarryNight(unsigned long currentTime)
@@ -508,49 +556,59 @@ void displayStarryNight(unsigned long currentTime)
     CRGB nightColor = CRGB(0, 0, 30);
     fill_solid(leds, NUM_LEDS, nightColor);
 
-    /*for (int i = 0; i < NUM_STARS; i++)
+    for (int i = 0; i < NUM_STARS; i++)
     {
         if (currentTime - stars[i].lastUpdate > stars[i].twinkleSpeed)
         {
             stars[i].lastUpdate = currentTime;
 
-            int change = random(-30, 30);
-            stars[i].brightness = constrain(stars[i].brightness + change, 80, 255);
+            // Variation plus douce et progressive
+            int change = random(-15, 15);                                            // Réduit de 30 à 15
+            stars[i].brightness = constrain(stars[i].brightness + change, 100, 220); // Plage réduite
         }
 
+        // Appliquer une transition douce avec interpolation
         uint8_t b = stars[i].brightness;
-        leds[stars[i].pos] = CRGB(b * 0.9, b * 0.9, b);
+        // Teinte blanche/bleutée très subtile
+        leds[stars[i].pos] = CRGB(b * 0.95, b * 0.95, b);
     }
 
-    if (random(1000) < 3)
-    {
+    // Étoiles filantes encore plus rares
+    if (random(2000) < 2)
+    { // Divisé par 2 la fréquence
         shootingStar();
-    }*/
+    }
 }
 
 void shootingStar()
 {
     int startPos = random(NUM_LEDS - 10);
-    int length = random(3, 8);
+    int length = random(4, 7); // Traînée plus courte
 
-    for (int i = 0; i < length; i++)
-    {
-        if (startPos + i < NUM_LEDS)
+    // Animation plus fluide avec dégradé
+    for (int frame = 0; frame < 8; frame++)
+    { // Plus de frames pour fluidité
+        for (int i = 0; i < length; i++)
         {
-            uint8_t brightness = 255 - (i * 40);
-            leds[startPos + i] = CRGB(brightness, brightness, brightness * 1.1);
+            int pos = startPos + i + (frame / 2); // Avance plus lentement
+            if (pos < NUM_LEDS)
+            {
+                uint8_t brightness = map(i, 0, length, 220, 50); // Dégradé plus doux
+                brightness = brightness * (8 - frame) / 8;       // Fade out progressif
+                leds[pos] = CRGB(brightness, brightness, brightness * 1.05);
+            }
         }
-    }
-#ifdef FASTLED
-    FastLED.show();
-#endif
-    delay(30);
+        FastLED.show();
+        delay(25); // Animation plus fluide
 
-    for (int i = 0; i < length; i++)
-    {
-        if (startPos + i < NUM_LEDS)
+        // Effacement progressif de la traînée
+        for (int i = 0; i < length; i++)
         {
-            leds[startPos + i] = CRGB(0, 0, 30);
+            int pos = startPos + i + (frame / 2);
+            if (pos < NUM_LEDS)
+            {
+                leds[pos] = CRGB(0, 0, 30);
+            }
         }
     }
 }
