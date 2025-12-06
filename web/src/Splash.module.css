@@ -46,16 +46,6 @@
     width: 100%;
   }
 
-  .logo {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-    animation: float 3s ease-in-out infinite;
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
 
   .title {
     font-size: 2.5rem;

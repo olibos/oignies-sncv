@@ -84,7 +84,11 @@ export default function Control() {
         <div className="header">
           <div className="header-top">
             <div className="header-spacer"></div>
-            <h1 className="title">🚂 Oignies SNCV</h1>
+            <h1 className="title">
+              Oignies
+              <br />
+              SNCV
+            </h1>
             <div className="header-spacer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <div className="theme-toggle">
                 <button
@@ -256,22 +260,22 @@ export default function Control() {
 
         {/* Train Control */}
         <div className="card">
-          <h2 className="card-title">🚂 Vitesse</h2>
+          <h2 className="card-title">🚊 Vitesse</h2>
           
           <div style={{ marginBottom: '1rem' }}>
             <label className="label">Direction</label>
             <div className="grid-2">
               <button
+                onClick={() => setForwardDirection(false)}
+                className={`btn ${!forwardDirection ? 'btn-green' : 'btn-default'}`}
+              >
+                ⬅️
+              </button>
+              <button
                 onClick={() => setForwardDirection(true)}
                 className={`btn ${forwardDirection ? 'btn-green' : 'btn-default'}`}
               >
-                ➡️ Avant
-              </button>
-              <button
-                onClick={() => setForwardDirection(false)}
-                className={`btn ${!forwardDirection ? 'btn-purple' : 'btn-default'}`}
-              >
-                ⬅️ Arrière
+                ➡️
               </button>
             </div>
           </div>
@@ -310,7 +314,7 @@ export default function Control() {
           <div className="status-content">
             <span>💡 {getLightModeText()}</span>
             <span>🚪 WC : {wcDoorOpen ? 'OUVERT 💩' : 'FERMÉ'}</span>
-            <span>🚂 {trainSpeed}% {forwardDirection ? '→' : '←'}</span>
+            <span>🚊 {trainSpeed}% {forwardDirection ? '→' : '←'}</span>
           </div>
         </div>
       </div>

@@ -8,8 +8,6 @@ export default function ConnectionScreen() {
   return (
     <div className={Classes.container}>
       <div className={Classes["connection-container"]}>
-        <div className={Classes.logo}>🚂</div>
-        
         <h1 className={Classes.title}>Oignies SNCV</h1>
 
         {error && (
