@@ -1,0 +1,176 @@
+.container {
+  /* The image file */
+  background-image: image-set(
+    url("./assets/oignies.avif") type("image/avif") 1x,
+    url("./assets/oignies.webp") type("image/webp") 1x,
+    url("./assets/oignies.jpg") type("image/jpeg") 1x
+  );
+
+  /* Anchor the image to the bottom center */
+  background-position: bottom center;
+
+  /* Scale the image to cover the width, but don't stretch */
+  background-size: 100% auto; 
+  /* Alternatively use 'cover' if you don't mind cropping the sides on desktop */
+
+  /* Do not repeat the image */
+  background-repeat: no-repeat;
+
+  /* The Hex color matching the top of your sky to fill empty space */
+  background-color: #0B1A2E; /* Adjust this specific hex code to match perfectly */
+  
+  min-height: 100dvh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  transition: background 0.3s ease;
+  color: white;
+
+}
+
+@media (orientation: landscape) {
+  .container {
+    background-image: image-set(
+    url("./assets/landscape.avif") type("image/avif") 1x,
+    url("./assets/landscape.webp") type("image/webp") 1x,
+    url("./assets/landscape.jpg") type("image/jpeg") 1x
+    );
+  }
+}
+
+  .connection-container {
+    text-align: center;
+    max-width: 500px;
+    width: 100%;
+  }
+
+  .logo {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 3.5rem;
+  }
+
+  .connect-button {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    margin: 0 auto 2rem;
+    border: none;
+    border-radius: 50%;
+    background: #1f2937e0;
+    color: #3b82f6;
+    font-size: 1.25rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .connect-button:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.4);
+  }
+
+  .connect-button:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .connect-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .connect-button.connecting {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+      box-shadow: 0 20px 60px rgba(59, 130, 246, 0.6);
+    }
+  }
+
+  .button-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .status-message {
+    padding: 1rem 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-weight: 500;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .status-error {
+    background: rgba(239, 68, 68, 0.2);
+    border: 2px solid rgba(239, 68, 68, 0.5);
+    color: #fee;
+  }
+
+  .status-success {
+    background: rgba(34, 197, 94, 0.2);
+    border: 2px solid rgba(34, 197, 94, 0.5);
+    color: #dfe;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    opacity: 0.7;
+    font-size: 0.875rem;
+  }
+
+  .bluetooth-icon-animated {
+    animation: blink 2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
