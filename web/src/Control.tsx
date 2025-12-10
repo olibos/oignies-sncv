@@ -11,11 +11,9 @@ export default function Control() {
   const [timeOfDay, setTimeOfDay] = useState<LabelKeys>('day');
   const [brightness, setBrightness] = useState(80);
   const [wcDoorOpen, setWcDoorOpen] = useState(false);
-  const [trainSpeed, setTrainSpeed] = useState(0);
-  const [forwardDirection, setForwardDirection] = useState(true);
   const [_autoTime, setAutoTime] = useState(0);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
-  const { setLightMode, setLightColor, trainState: { lightMode, lightColor } } = useModuleCommunication();
+  const { setLightMode, setLightColor, trainState: { lightMode, lightColor, speed: trainSpeed, direction: trainDirection }, toggleWCDoor: updateWcDoor, setTrainSpeed, setTrainDirection } = useModuleCommunication();
   
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -60,6 +58,7 @@ export default function Control() {
 
   const toggleWCDoor = () => {
     setWcDoorOpen(!wcDoorOpen);
+    updateWcDoor();
   };
 
   const getTimeOfDayText = (tod: LabelKeys) => {
@@ -265,14 +264,14 @@ export default function Control() {
             <label className="label">Direction</label>
             <div className="grid-2">
               <button
-                onClick={() => setForwardDirection(false)}
-                className={`btn ${!forwardDirection ? 'btn-green' : 'btn-default'}`}
+                onClick={() => setTrainDirection('reverse')}
+                className={`btn ${trainDirection === 'reverse' ? 'btn-green' : 'btn-default'}`}
               >
                 ⬅️
               </button>
               <button
-                onClick={() => setForwardDirection(true)}
-                className={`btn ${forwardDirection ? 'btn-green' : 'btn-default'}`}
+                onClick={() => setTrainDirection('forward')}
+                className={`btn ${trainDirection === 'forward' ? 'btn-green' : 'btn-default'}`}
               >
                 ➡️
               </button>
@@ -299,7 +298,7 @@ export default function Control() {
           <div className="speed-indicator">
             <div className="speed-box">
               <div className="speed-value">
-                {forwardDirection ? '→' : '←'} {trainSpeed}
+                {trainDirection === 'forward' ? '→' : '←'} {trainSpeed}
               </div>
               <div className="speed-label">
                 {trainSpeed === 0 ? 'ARRÊTÉ' : trainSpeed < 30 ? 'LENT' : trainSpeed < 70 ? 'MOYEN' : 'RAPIDE'}
@@ -313,7 +312,7 @@ export default function Control() {
           <div className="status-content">
             <span>💡 {getLightModeText()}</span>
             <span>🚪 WC : {wcDoorOpen ? 'OUVERT 💩' : 'FERMÉ'}</span>
-            <span>🚊 {trainSpeed}% {forwardDirection ? '→' : '←'}</span>
+            <span>🚊 {trainSpeed}% {trainDirection === 'forward' ? '→' : '←'}</span>
           </div>
         </div>
       </div>

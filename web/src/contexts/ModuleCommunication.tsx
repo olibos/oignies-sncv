@@ -19,7 +19,7 @@ interface ModuleCommunicationContextType {
   connect(): Promise<void>;
   disconnect(): void;
   setTrainSpeed(speed: number): Promise<void>;
-  setTrainDirection(forward: boolean): Promise<void>;
+  setTrainDirection(direction: 'forward' | 'reverse'): Promise<void>;
   setLightMode(mode: TrainState['lightMode']): Promise<void>;
   setLightColor(color: string): Promise<void>;
   setLightBrightness(brightness: number): Promise<void>;
@@ -43,7 +43,7 @@ export const ModuleCommunicationProvider = ({ children }: PropsWithChildren) => 
   const [error, setError] = useState<string>();
   
   const [trainState, setTrainState] = useState<TrainState>({
-    speed: 0,
+    speed: 50,
     direction: 'forward',
     lightMode: 'auto',
     lightColor: '#FFD700',
@@ -126,9 +126,9 @@ export const ModuleCommunicationProvider = ({ children }: PropsWithChildren) => 
   }, [writeCharacteristic]);
 
   // Set train direction
-  const setTrainDirection = useCallback(async (forward: boolean) => {
-    await writeCharacteristic({cmd:'direction', value: forward});
-    setTrainState(prev => ({ ...prev, forward }));
+  const setTrainDirection = useCallback(async (direction: 'forward' | 'reverse') => {
+    await writeCharacteristic({cmd:'direction', value: direction === 'forward'});
+    setTrainState(prev => ({ ...prev, direction }));
   }, [writeCharacteristic]);
 
   // Set light mode

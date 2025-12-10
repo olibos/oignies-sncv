@@ -10,6 +10,18 @@
 #define TRAIN_CONTROL_CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define STATUS_CHAR_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a9"
 #define STATUS_LED_PIN 2
+#define BEDROOM_PIN 16
+#define WC_PIN 17
+#define TRAIN_BRAKE 18
+#define TRAIN_DIR 19
+#define TRAIN_PWM 23
+// Paramètres PWM
+// Fréquence PWM en Hz (20 kHz recommandé)
+#define PWM_FREQ 20000
+// Canal PWM
+#define PWM_CHANNEL 0
+// Résolution 8 bits (0-255)
+#define PWM_RESOLUTION 8
 
 BLEServer *pServer = NULL;
 BLECharacteristic *pControlCharacteristic = NULL;
@@ -19,7 +31,7 @@ bool oldDeviceConnected = false;
 
 // Configuration des LED
 #define LED_PIN 5
-#define NUM_LEDS 102
+#define NUM_LEDS 105
 #define LED_TYPE WS2812
 #define COLOR_ORDER GRB
 #define BRIGHTNESS 200
@@ -45,6 +57,10 @@ AnimationMode currentMode = MODE_AUTO;
 bool animationEnabled = true;
 float manualProgress = 0.0;
 unsigned long pausedTime = 0;
+bool needClose = false;
+unsigned long timeToClose = 0;
+bool forward = true;
+uint8_t trainSpeed = 100;
 
 // Structure pour les étoiles
 struct Star
@@ -55,9 +71,10 @@ struct Star
     unsigned long lastUpdate;
 };
 
-#define NUM_STARS 25
-Star stars[NUM_STARS];
 CRGB manualColor;
+CRGB dayColor = CRGB(255, 255, 255);
+CRGB sunsetColor = CRGB(255, 100, 50);
+CRGB nightColor = CRGB(0, 0, 125);
 
 unsigned long cycleStart = 0;
 unsigned long lastStatusUpdate = 0;
@@ -69,13 +86,16 @@ void sendStatusUpdate();
 void setMode(String mode);
 void setBrightness(int value);
 void setSpeed(int speedPercent);
+void setTrainSpeed(int speedPercent);
+void setTrainDirection(bool forward);
 String getStatusJSON();
 void updateAnimation();
 void displayDay();
 void transitionToNight(float progress);
 void transitionToDay(float progress);
-void displayStarryNight(unsigned long currentTime);
+void displayNight();
 void shootingStar();
+void move(bool sens, int vitesse);
 
 // ===== CALLBACKS BLE =====
 
@@ -123,7 +143,22 @@ void setup()
 
     // Initialisation de la LED de statut
     pinMode(STATUS_LED_PIN, OUTPUT);
+    pinMode(BEDROOM_PIN, OUTPUT);
+    pinMode(WC_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
+    digitalWrite(BEDROOM_PIN, HIGH);
+    digitalWrite(WC_PIN, HIGH);
+
+    pinMode(TRAIN_DIR, OUTPUT);
+    pinMode(TRAIN_BRAKE, OUTPUT);
+
+    // Configuration du PWM
+    ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+    ledcAttachPin(TRAIN_PWM, PWM_CHANNEL);
+
+    // Activation du frein au démarrage
+    ledcWrite(PWM_CHANNEL, 0);
+    digitalWrite(TRAIN_BRAKE, LOW);
 
     // Initialisation FastLED
     FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
@@ -133,14 +168,6 @@ void setup()
 
     // Initialisation des étoiles
     randomSeed(analogRead(0));
-    for (int i = 0; i < NUM_STARS; i++)
-    {
-        stars[i].pos = random(NUM_LEDS);
-        stars[i].brightness = random(120, 200);  // Plage plus étroite et plus douce
-        stars[i].twinkleSpeed = random(50, 200); // Vitesse de scintillement plus lente
-        stars[i].lastUpdate = millis();
-    }
-
     cycleStart = millis();
 
     // Initialisation BLE
@@ -148,6 +175,35 @@ void setup()
 
     Serial.println("Système prêt !");
     Serial.println("Connectez-vous via BLE");
+    delay(100);
+    move(forward, trainSpeed);
+}
+
+void move(bool sens, int vitesse)
+{
+    if (sens != forward)
+    {
+        // 1. Arrêter le PWM
+        ledcWrite(PWM_CHANNEL, 0);
+        delay(5);
+
+        // 2. Activer le frein
+        digitalWrite(TRAIN_BRAKE, HIGH);
+        delay(10); // Attendre que le frein soit actif
+
+        // 3. Changer la direction (moteur freiné = sûr)
+        digitalWrite(TRAIN_DIR, sens ? LOW : HIGH);
+        delay(10); // Attendre la stabilisation
+
+        // 4. Libérer le frein
+        digitalWrite(TRAIN_BRAKE, LOW);
+        delay(10); // Attendre que le frein soit inactif
+        forward = sens;
+    }
+
+    trainSpeed = vitesse;
+    // 5. Appliquer la vitesse PWM
+    ledcWrite(PWM_CHANNEL, vitesse);
 }
 
 void setupBLE()
@@ -201,9 +257,14 @@ void setupBLE()
 }
 
 // ===== LOOP PRINCIPAL =====
-
 void loop()
 {
+    if (needClose && millis() > timeToClose)
+    {
+        needClose = false;
+        digitalWrite(WC_PIN, HIGH);
+    }
+
     // Gestion de la reconnexion BLE
     if (!deviceConnected && oldDeviceConnected)
     {
@@ -218,11 +279,16 @@ void loop()
         oldDeviceConnected = true;
     }
 
+    bool update = millis() - lastStatusUpdate > 5000;
+    if (update)
+    {
+        lastStatusUpdate = millis();
+    }
+
     // Envoi du statut périodique (toutes les 500ms si connecté)
-    if (deviceConnected && millis() - lastStatusUpdate > 500)
+    if (deviceConnected && update)
     {
         sendStatusUpdate();
-        lastStatusUpdate = millis();
     }
 
     // Animation LED
@@ -231,12 +297,12 @@ void loop()
         updateAnimation();
     }
 
+    leds[104] = leds[70] = leds[69] = leds[35] = leds[34] = leds[0] = CRGB(0, 0, 0);
     FastLED.show();
     delay(20);
 }
 
 // ===== TRAITEMENT DES COMMANDES =====
-
 void processCommand(String command)
 {
     // Parser JSON avec ArduinoJson v7
@@ -266,14 +332,17 @@ void processCommand(String command)
     if (cmdStr == "MODE")
     {
         JsonVariant value = doc["value"];
-        if (value.is<JsonObject>()) {
+        if (value.is<JsonObject>())
+        {
             JsonObject obj = value.as<JsonObject>();
             manualColor = CRGB(obj["r"] | 0, obj["g"] | 0, obj["b"] | 0);
             setMode("manual");
             Serial.print("Color: ");
             Serial.printf("r=%d, g=%d, b=%d\n", manualColor.r, manualColor.g, manualColor.b);
-        } else if (value.is<const char*>()) {
-            setMode(String(value.as<const char*>()));
+        }
+        else if (value.is<const char *>())
+        {
+            setMode(String(value.as<const char *>()));
         }
     }
     else if (cmdStr == "BRIGHTNESS")
@@ -286,6 +355,16 @@ void processCommand(String command)
         int value = doc["value"];
         setSpeed(value);
     }
+    else if (cmdStr == "TRAIN-SPEED")
+    {
+        int value = doc["value"];
+        setTrainSpeed(value);
+    }
+    else if (cmdStr == "DIRECTION")
+    {
+        bool forward = doc["value"];
+        setTrainDirection(forward);
+    }
     else if (cmdStr == "STATUS")
     {
         sendStatusUpdate();
@@ -294,6 +373,12 @@ void processCommand(String command)
     {
         bool value = doc["value"];
         digitalWrite(STATUS_LED_PIN, value ? HIGH : LOW);
+    }
+    else if (cmdStr == "WC" && !needClose)
+    {
+        needClose = true;
+        timeToClose = millis() + 700;
+        digitalWrite(WC_PIN, LOW);
     }
 }
 
@@ -367,6 +452,19 @@ void setSpeed(int speedPercent)
     Serial.println("Vitesse: " + String(speedPercent) + "%");
 }
 
+void setTrainSpeed(int speedPercent)
+{
+    speedPercent = constrain(speedPercent, 0, 100);
+    Serial.println("Vitesse Train: " + String(speedPercent) + "%");
+    move(false, speedPercent * 2);
+}
+
+void setTrainDirection(bool forward)
+{
+    Serial.println("Vitesse Direction: " + forward ? "avant" : "arrière");
+    move(forward, trainSpeed);
+}
+
 String getStatusJSON()
 {
     JsonDocument doc;
@@ -399,7 +497,6 @@ String getStatusJSON()
     doc["brightness"] = FastLED.getBrightness();
     doc["progress"] = round(progress * 10) / 10.0; // 1 décimale
     doc["speed"] = (BASE_CYCLE_DURATION * 100) / cycleDuration;
-    doc["stars"] = NUM_STARS;
     doc["leds"] = NUM_LEDS;
 
     // Sérialiser en String
@@ -439,11 +536,12 @@ void updateAnimation()
             // Phase 2 : COUCHER DE SOLEIL (25-37.5%)
             float sunsetProgress = (progress - 0.25) / 0.125;
             transitionToNight(sunsetProgress);
+            digitalWrite(BEDROOM_PIN, LOW);
         }
         else if (progress < 0.625)
         {
             // Phase 3 : NUIT ÉTOILÉE (37.5-62.5%)
-            displayStarryNight(currentTime);
+            displayNight();
         }
         else if (progress < 0.75)
         {
@@ -455,6 +553,7 @@ void updateAnimation()
         {
             // Phase 5 : JOUR (75-100%)
             displayDay();
+            digitalWrite(BEDROOM_PIN, HIGH);
         }
         break;
     }
@@ -464,7 +563,7 @@ void updateAnimation()
         break;
 
     case MODE_NIGHT:
-        displayStarryNight(currentTime);
+        displayNight();
         break;
 
     case MODE_PAUSED:
@@ -478,16 +577,11 @@ void updateAnimation()
 
 void displayDay()
 {
-    CRGB dayColor = CRGB(135, 206, 250);
     fill_solid(leds, NUM_LEDS, dayColor);
 }
 
 void transitionToNight(float progress)
 {
-    CRGB dayColor = CRGB(135, 206, 250);
-    CRGB sunsetColor = CRGB(255, 100, 50);
-    CRGB nightColor = CRGB(0, 0, 30);
-
     CRGB currentColor;
 
     if (progress < 0.5)
@@ -504,25 +598,11 @@ void transitionToNight(float progress)
     }
 
     fill_solid(leds, NUM_LEDS, currentColor);
-
-    // Apparition progressive des étoiles dans la deuxième moitié
-    if (progress > 0.5)
-    {
-        float starProgress = (progress - 0.5) * 2;
-        for (int i = 0; i < NUM_STARS; i++)
-        {
-            uint8_t starBrightness = stars[i].brightness * starProgress;
-            leds[stars[i].pos] = CRGB(starBrightness * 0.9, starBrightness * 0.9, starBrightness);
-        }
-    }
 }
 
 void transitionToDay(float progress)
 {
-    CRGB nightColor = CRGB(0, 0, 30);
     CRGB sunriseColor = CRGB(255, 150, 80); // Orange/rose lever de soleil
-    CRGB dayColor = CRGB(135, 206, 250);
-
     CRGB currentColor;
 
     if (progress < 0.5)
@@ -539,77 +619,9 @@ void transitionToDay(float progress)
     }
 
     fill_solid(leds, NUM_LEDS, currentColor);
-
-    // Disparition progressive des étoiles dans la première moitié
-    if (progress < 0.5)
-    {
-        float starProgress = 1.0 - (progress * 2); // Fade out
-        for (int i = 0; i < NUM_STARS; i++)
-        {
-            uint8_t starBrightness = stars[i].brightness * starProgress;
-            leds[stars[i].pos] = CRGB(starBrightness * 0.9, starBrightness * 0.9, starBrightness);
-        }
-    }
 }
 
-void displayStarryNight(unsigned long currentTime)
+void displayNight()
 {
-    CRGB nightColor = CRGB(0, 0, 30);
     fill_solid(leds, NUM_LEDS, nightColor);
-
-    for (int i = 0; i < NUM_STARS; i++)
-    {
-        if (currentTime - stars[i].lastUpdate > stars[i].twinkleSpeed)
-        {
-            stars[i].lastUpdate = currentTime;
-
-            // Variation plus douce et progressive
-            int change = random(-15, 15);                                            // Réduit de 30 à 15
-            stars[i].brightness = constrain(stars[i].brightness + change, 100, 220); // Plage réduite
-        }
-
-        // Appliquer une transition douce avec interpolation
-        uint8_t b = stars[i].brightness;
-        // Teinte blanche/bleutée très subtile
-        leds[stars[i].pos] = CRGB(b * 0.95, b * 0.95, b);
-    }
-
-    // Étoiles filantes encore plus rares
-    if (random(2000) < 2)
-    { // Divisé par 2 la fréquence
-        shootingStar();
-    }
-}
-
-void shootingStar()
-{
-    int startPos = random(NUM_LEDS - 10);
-    int length = random(4, 7); // Traînée plus courte
-
-    // Animation plus fluide avec dégradé
-    for (int frame = 0; frame < 8; frame++)
-    { // Plus de frames pour fluidité
-        for (int i = 0; i < length; i++)
-        {
-            int pos = startPos + i + (frame / 2); // Avance plus lentement
-            if (pos < NUM_LEDS)
-            {
-                uint8_t brightness = map(i, 0, length, 220, 50); // Dégradé plus doux
-                brightness = brightness * (8 - frame) / 8;       // Fade out progressif
-                leds[pos] = CRGB(brightness, brightness, brightness * 1.05);
-            }
-        }
-        FastLED.show();
-        delay(25); // Animation plus fluide
-
-        // Effacement progressif de la traînée
-        for (int i = 0; i < length; i++)
-        {
-            int pos = startPos + i + (frame / 2);
-            if (pos < NUM_LEDS)
-            {
-                leds[pos] = CRGB(0, 0, 30);
-            }
-        }
-    }
 }
