@@ -456,7 +456,7 @@ void setTrainSpeed(int speedPercent)
 {
     speedPercent = constrain(speedPercent, 0, 100);
     Serial.println("Vitesse Train: " + String(speedPercent) + "%");
-    move(false, speedPercent * 2);
+    move(forward, speedPercent * 2);
 }
 
 void setTrainDirection(bool forward)
