@@ -39,8 +39,8 @@ bool oldDeviceConnected = false;
 CRGB leds[NUM_LEDS];
 
 // Paramètres de l'animation
-unsigned long cycleDuration = 60000;
-#define BASE_CYCLE_DURATION 60000
+unsigned long cycleDuration = 75000;
+#define BASE_CYCLE_DURATION 75000
 
 // Contrôle de l'animation
 enum AnimationMode
@@ -526,32 +526,32 @@ void updateAnimation()
         float progress = (float)elapsed / cycleDuration;
 
         // Cycle complet : Jour → Coucher → Nuit → Lever → Jour
-        if (progress < 0.25)
+        if (progress < 0.3)
         {
-            // Phase 1 : JOUR (0-25%)
+            // Phase 1 : JOUR (0-30%)
             displayDay();
         }
-        else if (progress < 0.375)
+        else if (progress < 0.4)
         {
-            // Phase 2 : COUCHER DE SOLEIL (25-37.5%)
-            float sunsetProgress = (progress - 0.25) / 0.125;
+            // Phase 2 : COUCHER DE SOLEIL (30-40%)
+            float sunsetProgress = (progress - 0.3) / 0.1;
             transitionToNight(sunsetProgress);
             digitalWrite(BEDROOM_PIN, LOW);
         }
-        else if (progress < 0.625)
+        else if (progress < 0.6)
         {
-            // Phase 3 : NUIT ÉTOILÉE (37.5-62.5%)
+            // Phase 3 : NUIT ÉTOILÉE (40-60%)
             displayNight();
         }
-        else if (progress < 0.75)
+        else if (progress < 0.7)
         {
-            // Phase 4 : LEVER DE SOLEIL (62.5-75%)
-            float sunriseProgress = (progress - 0.625) / 0.125;
+            // Phase 4 : LEVER DE SOLEIL (60-70%)
+            float sunriseProgress = (progress - 0.6) / 0.1;
             transitionToDay(sunriseProgress);
         }
         else
         {
-            // Phase 5 : JOUR (75-100%)
+            // Phase 5 : JOUR (70-100%)
             displayDay();
             digitalWrite(BEDROOM_PIN, HIGH);
         }
