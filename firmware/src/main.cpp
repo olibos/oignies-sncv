@@ -4,6 +4,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <ArduinoJson.h>
+#include "wc.cpp"
 
 // UUIDs pour BLE - Personnalisés pour éviter conflits
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -39,7 +40,7 @@ bool oldDeviceConnected = false;
 CRGB leds[NUM_LEDS];
 
 // Paramètres de l'animation
-unsigned long cycleDuration = 75000;
+uint32_t cycleDuration = 75000;
 #define BASE_CYCLE_DURATION 75000
 
 // Contrôle de l'animation
@@ -56,28 +57,17 @@ enum AnimationMode
 AnimationMode currentMode = MODE_AUTO;
 bool animationEnabled = true;
 float manualProgress = 0.0;
-unsigned long pausedTime = 0;
-bool needClose = false;
-unsigned long timeToClose = 0;
+Door wc(WC_PIN);
 bool forward = true;
 uint8_t trainSpeed = 100;
-
-// Structure pour les étoiles
-struct Star
-{
-    int pos;
-    uint8_t brightness;
-    uint8_t twinkleSpeed;
-    unsigned long lastUpdate;
-};
 
 CRGB manualColor;
 CRGB dayColor = CRGB(255, 255, 255);
 CRGB sunsetColor = CRGB(255, 100, 50);
 CRGB nightColor = CRGB(0, 0, 125);
 
-unsigned long cycleStart = 0;
-unsigned long lastStatusUpdate = 0;
+uint32_t cycleStart = 0;
+uint32_t lastStatusUpdate = 0;
 
 // ===== DÉCLARATIONS FORWARD =====
 void setupBLE();
@@ -94,7 +84,6 @@ void displayDay();
 void transitionToNight(float progress);
 void transitionToDay(float progress);
 void displayNight();
-void shootingStar();
 void move(bool sens, int vitesse);
 
 // ===== CALLBACKS BLE =====
@@ -144,10 +133,8 @@ void setup()
     // Initialisation de la LED de statut
     pinMode(STATUS_LED_PIN, OUTPUT);
     pinMode(BEDROOM_PIN, OUTPUT);
-    pinMode(WC_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
     digitalWrite(BEDROOM_PIN, HIGH);
-    digitalWrite(WC_PIN, HIGH);
 
     pinMode(TRAIN_DIR, OUTPUT);
     pinMode(TRAIN_BRAKE, OUTPUT);
@@ -166,8 +153,7 @@ void setup()
     FastLED.clear();
     FastLED.show();
 
-    // Initialisation des étoiles
-    randomSeed(analogRead(0));
+    wc.begin("wc");
     cycleStart = millis();
 
     // Initialisation BLE
@@ -259,12 +245,6 @@ void setupBLE()
 // ===== LOOP PRINCIPAL =====
 void loop()
 {
-    if (needClose && millis() > timeToClose)
-    {
-        needClose = false;
-        digitalWrite(WC_PIN, HIGH);
-    }
-
     // Gestion de la reconnexion BLE
     if (!deviceConnected && oldDeviceConnected)
     {
@@ -374,11 +354,9 @@ void processCommand(String command)
         bool value = doc["value"];
         digitalWrite(STATUS_LED_PIN, value ? HIGH : LOW);
     }
-    else if (cmdStr == "WC" && !needClose)
+    else if (cmdStr == "WC")
     {
-        needClose = true;
-        timeToClose = millis() + 700;
-        digitalWrite(WC_PIN, LOW);
+        wc.toggle();
     }
 }
 
@@ -426,7 +404,6 @@ void setMode(String mode)
     else if (mode == "pause")
     {
         currentMode = MODE_PAUSED;
-        pausedTime = millis();
         Serial.println("Mode PAUSE");
     }
     else if (mode == "stop")
@@ -488,7 +465,7 @@ String getStatusJSON()
     }
 
     // Calculer la progression
-    unsigned long elapsed = millis() - cycleStart;
+    uint32_t elapsed = millis() - cycleStart;
     float progress = (float)(elapsed % cycleDuration) / cycleDuration * 100;
 
     // Remplir le document JSON
@@ -510,8 +487,8 @@ String getStatusJSON()
 
 void updateAnimation()
 {
-    unsigned long currentTime = millis();
-    unsigned long elapsed = currentTime - cycleStart;
+    uint32_t currentTime = millis();
+    uint32_t elapsed = currentTime - cycleStart;
 
     switch (currentMode)
     {
@@ -521,6 +498,8 @@ void updateAnimation()
         {
             cycleStart = currentTime;
             elapsed = 0;
+            wc.open();
+            wc.close(5000);
         }
 
         float progress = (float)elapsed / cycleDuration;
